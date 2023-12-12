@@ -1,9 +1,13 @@
 #include <limits.h>
 #include <stdio.h> // Sofia
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <string.h>
+#include <sys/stat.h>
 
+#include <fcntl.h>
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
@@ -11,51 +15,79 @@
 
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
+  struct dirent *entry;
   DIR *dir;
-  if (argc > 1) {
-    char *endptr;
-    unsigned long int delay = strtoul(argv[1], &endptr, 10);
+  int input_fd;
+  int output_fd;
+  if (argc < 2) {
+    fprintf(stderr, "Usage: %s <directory>\n", argv[0]);
+    return 1;
+  }
+  
+  char *directoryPath = argv[1];
+  //constant for the number of processes that can be created
+  const int MAX_PROC = atoi(argv[2]);
+  printf("MAX_PROC: %d\n", MAX_PROC);
 
-    if (*endptr != '\0' || delay > UINT_MAX) {
-      fprintf(stderr, "Invalid delay value or value too large\n");
-      return 1;
-    }
+  dir = opendir(directoryPath);
+  input_fd = chdir(directoryPath);
+  output_fd = chdir(directoryPath);
 
-    state_access_delay_ms = (unsigned int)delay;
+  if (dir == NULL){
+    printf("Error opening directory %s", directoryPath);
+    return 1;
   }
 
-  const char *directoryPath = "jobs"; // Sofia Directory path containing .jobs files
-  processJobs(directoryPath);
 
   if (ems_init(state_access_delay_ms)) {
     fprintf(stderr, "Failed to initialize EMS\n");
     return 1;
   }
-    char *path = argv[2];
-    //opens the directory using POSIX
-    dir = opendir(path);
-    //checks if the directory is valid
-    if(dir == NULL){
-      fprintf(stderr, "Invalid directory\n");
-      return 1;
-    }
+
+  
   while(1){
-    struct dirent *entry;
     entry = readdir(dir);
     if(entry == NULL){
+      close(input_fd);
+      close(output_fd);
       break;
     }
+    
+    //verifyies if the entry name ends up in ".jobs"
+    const char *dot = strrchr(entry->d_name, '.');
+    if(!dot || dot == entry->d_name){
+      continue;
+    }
+    if(strcmp(dot, ".jobs") != 0){
+      continue;
+    }
+    input_fd = open(entry->d_name, O_RDONLY);
+    if(input_fd == -1){
+      continue;
+    }
     printf("%s\n", entry->d_name);
-    while (0) {
+    char *output_name = malloc(strlen(entry->d_name) + 1);
+    strcpy(output_name, entry->d_name);
+    char *dot2 = strrchr(output_name, '.');
+    *dot2 = '\0';
+    strcat(output_name, ".out");
+    output_fd = open(output_name, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+
+    if(output_fd == -1){
+      printf("Error opening file %s\n", output_name);
+      free(output_name);
+      close(input_fd);
+      continue;
+    }
+    free(output_name);
       unsigned int event_id, delay;
       size_t num_rows, num_columns, num_coords;
       size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-      printf("> ");
-      fflush(stdout);
+      int ended = 0;
       while(1){
-        switch (get_next(STDIN_FILENO)) {
+        switch (get_next(input_fd)){
           case CMD_CREATE:
-            if (parse_create(STDIN_FILENO, &event_id, &num_rows, &num_columns) != 0) {
+            if (parse_create(input_fd, &event_id, &num_rows, &num_columns) != 0) {
               fprintf(stderr, "Invalid command. See HELP for usage\n");
               continue;
             }
@@ -65,9 +97,8 @@ int main(int argc, char *argv[]) {
             }
 
             break;
-
           case CMD_RESERVE:
-            num_coords = parse_reserve(STDIN_FILENO, MAX_RESERVATION_SIZE, &event_id, xs, ys);
+            num_coords = parse_reserve(input_fd, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
             if (num_coords == 0) {
               fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -81,26 +112,27 @@ int main(int argc, char *argv[]) {
             break;
 
           case CMD_SHOW:
-            if (parse_show(STDIN_FILENO, &event_id) != 0) {
+            if (parse_show(input_fd, &event_id) != 0) {
               fprintf(stderr, "Invalid command. See HELP for usage\n");
+              
               continue;
             }
 
-            if (ems_show(event_id)) {
+            if (ems_show(event_id, output_fd)) {
               fprintf(stderr, "Failed to show event\n");
             }
 
             break;
 
           case CMD_LIST_EVENTS:
-            if (ems_list_events()) {
+            if (ems_list_events(output_fd)) {
               fprintf(stderr, "Failed to list events\n");
             }
-
             break;
 
           case CMD_WAIT:
-            if (parse_wait(STDIN_FILENO, &delay, NULL) == -1) {  // thread_id is not implemented
+            if (parse_wait(input_fd, &delay, NULL) == -1) {  // thread_id is not implemented
+            
               fprintf(stderr, "Invalid command. See HELP for usage\n");
               continue;
             }
@@ -134,11 +166,15 @@ int main(int argc, char *argv[]) {
             break;
 
           case EOC:
-            ems_terminate();
-            return 0;
+            ended = 1;
+            break;
+        }
+        if(ended){
+          close(input_fd);
+          close(output_fd);
+          break;
         }
       }
-    }
   }
   closedir(dir);
   ems_terminate();

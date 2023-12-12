@@ -12,7 +12,6 @@ enum Command {
   CMD_WAIT,
   CMD_HELP,
   CMD_EMPTY,
-  CMD_READ, //Sofia
   CMD_INVALID,
   EOC  // End of commands
 };

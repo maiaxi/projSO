@@ -19,10 +19,10 @@ ems: main.c constants.h operations.o parser.o eventlist.o
 	$(CC) $(CFLAGS) -c ${@:.o=.c}
 
 run: ems
-	@./ems 0 jobs/
-
+	@./ems jobs/ 10
+#dir, max_processos, max_threads, delay
 clean:
-	rm -f *.o ems
+	rm -f *.o ems jobs/*.out
 
 format:
 	@which clang-format >/dev/null 2>&1 || echo "Please install clang-format to run this command"

@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
+#include <string.h>
 
 #include "eventlist.h"
 
@@ -156,7 +158,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(unsigned int event_id) {
+int ems_show(unsigned int event_id, int output_fd) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -168,41 +170,49 @@ int ems_show(unsigned int event_id) {
     fprintf(stderr, "Event not found\n");
     return 1;
   }
+  char buffer[2];
+  char space[2] = " ";
+  char newline[2] = "\n";
+
 
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
-      printf("%u", *seat);
-
-      if (j < event->cols) {
-        printf(" ");
-      }
+      //if the seat is reserved puts the reservation id in the buffer
+      sprintf(buffer, "%d", *seat);
+      write(output_fd, buffer, strlen(buffer));
+      write(output_fd, space, strlen(space));
     }
-
-    printf("\n");
+    //if its the last row, puts a newline
+    if (i < event->rows) {
+      write(output_fd, newline, strlen(newline));
+    }
   }
-
   return 0;
 }
 
-int ems_list_events() {
+int ems_list_events(int output_fd) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-
+  char noEvents[11] = "No events\n";
+  char event[8] = "Event: ";
+  char newline[2] = "\n";
+  char buffer[2];
   if (event_list->head == NULL) {
-    printf("No events\n");
+    write(output_fd, noEvents, strlen(noEvents));
     return 0;
   }
 
   struct ListNode* current = event_list->head;
   while (current != NULL) {
-    printf("Event: ");
-    printf("%u\n", (current->event)->id);
+    write(output_fd, event, strlen(event));
+    sprintf(buffer, "%d", (current->event)->id);
+    write(output_fd, buffer, strlen(buffer));
+    write(output_fd, newline, strlen(newline));
     current = current->next;
   }
-
   return 0;
 }
 
