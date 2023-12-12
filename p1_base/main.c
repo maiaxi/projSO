@@ -1,5 +1,5 @@
 #include <limits.h>
-#include <stdio.h>
+#include <stdio.h> // Sofia
 #include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -23,6 +23,9 @@ int main(int argc, char *argv[]) {
 
     state_access_delay_ms = (unsigned int)delay;
   }
+
+  const char *directoryPath = "jobs"; // Sofia Directory path containing .jobs files
+  processJobs(directoryPath);
 
   if (ems_init(state_access_delay_ms)) {
     fprintf(stderr, "Failed to initialize EMS\n");
