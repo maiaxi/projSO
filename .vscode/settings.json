@@ -14,6 +14,7 @@
         "*.rh": "c",
         "string": "c",
         "istream": "c",
-        "constants.h": "c"
+        "constants.h": "c",
+        "pthread.h": "c"
     }
 }

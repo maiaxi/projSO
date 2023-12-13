@@ -95,7 +95,6 @@ int main(int argc, char *argv[]) {
       unsigned int event_id, delay;
       size_t num_rows, num_columns, num_coords;
       size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-      int ended = 0;
       while(1){
         switch (get_next(input_fd)){
           case CMD_CREATE:
@@ -175,12 +174,8 @@ int main(int argc, char *argv[]) {
             printf("Child process with PID %d finished\n", getpid());
             close(input_fd);
             close(output_fd);
-            ended = 1;
             exit(EXIT_SUCCESS);
             break;
-        }
-        if(ended){
-          break;
         }
       }
     }
@@ -189,7 +184,6 @@ int main(int argc, char *argv[]) {
     }
   }
   //wait for all the children to finish
-
   while (active_children > 0){
     int status;
     wait(&status);
