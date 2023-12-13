@@ -172,16 +172,17 @@ int main(int argc, char *argv[]) {
             break;
 
           case EOC:
+            printf("Child process with PID %d finished\n", getpid());
+            close(input_fd);
+            close(output_fd);
             ended = 1;
+            exit(EXIT_SUCCESS);
             break;
         }
         if(ended){
           break;
         }
       }
-      close(input_fd);
-      close(output_fd);
-      printf("Child process with PID %d finished\n", getpid());
     }
     else{
       active_children++;
@@ -193,7 +194,7 @@ int main(int argc, char *argv[]) {
     int status;
     wait(&status);
     active_children--;
-  }  
+  }
   closedir(dir);
   ems_terminate();
   return 0;
