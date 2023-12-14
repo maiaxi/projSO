@@ -233,9 +233,6 @@ int main(int argc, char *argv[]) {
         }
         total_threads++;
       }
-      close(input_fd);
-      close(output_fd);
-      exit(EXIT_SUCCESS);
     }
     else{
       active_children++;
