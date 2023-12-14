@@ -1,5 +1,5 @@
 #include <limits.h>
-#include <stdio.h> // Sofia
+#include <stdio.h> 
 #include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -8,14 +8,18 @@
 #include <sys/wait.h>
 #include <pthread.h>
 #include <sys/types.h>
-
-
-
 #include <fcntl.h>
+
+
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
 
+/* New data type called 'thread_args_t' that will 
+ * be used to pass information to each thread. 
+ * Information about the input and output file descriptors, 
+ * state access delays, maximum number of threads, and pointers 
+ * to the trinco and read-write lock.*/
 typedef struct {
   int input_fd;
   int output_fd;
@@ -25,11 +29,22 @@ typedef struct {
   pthread_rwlock_t *rwl;
 } thread_args_t;
 
-
+/* This allows us to access all the necessary 
+ * information that the thread needs to work.*/
 void *thread_function(void *arg){
+  /* This represents the source of information that
+   * the thread will be reading from.*/
   int input_fd = ((thread_args_t *)arg)->input_fd;
+  /* This represents the destination of information 
+   * that the thread will be writing to.*/
   int output_fd = ((thread_args_t *)arg)->output_fd;
+  /* The trinco will be used to manage the flow of 
+   * traffic and ensure that only one thread can access 
+   * a shared resource at a time.*/
   pthread_mutex_t *trinco = ((thread_args_t *)arg)->trinco;
+  /* The read-write lock will be used to manage the flow of traffic 
+   * and ensure that multiple threads can read from a shared resource 
+   * at the same time, but only one thread can write to it at a time.*/
   //pthread_rwlock_t *rwl = ((thread_args_t *)arg)->rwl;
   unsigned int event_id, delay;
   size_t num_rows, num_columns, num_coords;
@@ -97,7 +112,8 @@ void *thread_function(void *arg){
           "  BARRIER\n"                      // Not implemented
           "  HELP\n");
       break;  
-    case CMD_BARRIER:  // Not implemented
+    case CMD_BARRIER: 
+      if(); // Not implemented
     case CMD_EMPTY:
       break;
     case EOC:
@@ -247,4 +263,58 @@ int main(int argc, char *argv[]) {
   closedir(dir);
   ems_terminate();
   return 0;
+}
+
+int num_threads = 4; // Total number of threads
+int barrier_count = 0; // Number of threads that have reached the barrier
+pthread_mutex_t barrier_mutex = PTHREAD_MUTEX_INITIALIZER; // Mutex for accessing the barrier_count variable
+pthread_cond_t barrier_cond = PTHREAD_COND_INITIALIZER; // Condition variable for waiting at the barrier
+
+void *thread_function(void *arg) {
+    // Do some work
+    printf("Thread %ld finished working\n", (long)arg);
+
+    // Lock the mutex before accessing the barrier_count variable
+    pthread_mutex_lock(&barrier_mutex);
+
+    // Increment the barrier_count variable
+    barrier_count++;
+
+    // If this is the last thread to reach the barrier, signal the other threads
+    if (barrier_count == num_threads) {
+        pthread_cond_broadcast(&barrier_cond);
+    }
+
+    // Wait at the barrier until all threads have reached it
+    while (barrier_count < num_threads) {
+        pthread_cond_wait(&barrier_cond, &barrier_mutex);
+    }
+
+    // Unlock the mutex after accessing the barrier_count variable
+    pthread_mutex_unlock(&barrier_mutex);
+
+    // Do some more work after passing the barrier
+    printf("Thread %ld finished working after the barrier\n", (long)arg);
+
+    return NULL;
+}
+
+int main() {
+    pthread_t threads[num_threads];
+    while(1){
+      
+      // Create and start the threads
+      for (long i = 0; i < num_threads; i++) {
+          pthread_create(&threads[i], NULL, thread_function, (void *)i);
+      }
+      // Wait for all threads to finish
+      for (int i = 0; i < num_threads; i++) {
+          pthread_join(threads[i], NULL);
+      }
+      if(return_value_threads == 1){ //para acabar
+        break;
+      }
+    }
+
+    return 0;
 }
