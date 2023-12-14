@@ -19,7 +19,7 @@ ems: main.c constants.h operations.o parser.o eventlist.o
 	$(CC) $(CFLAGS) -c ${@:.o=.c}
 
 run: ems
-	@./ems jobs/ 10
+	@./ems jobs/ 10 10
 #dir, max_processos, max_threads, delay
 clean:
 	rm -f *.o ems jobs/*.out

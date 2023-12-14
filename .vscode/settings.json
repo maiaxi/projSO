@@ -15,6 +15,7 @@
         "string": "c",
         "istream": "c",
         "constants.h": "c",
-        "pthread.h": "c"
+        "pthread.h": "c",
+        "eventlist.h": "c"
     }
 }
