@@ -17,5 +17,6 @@
         "constants.h": "c",
         "pthread.h": "c",
         "eventlist.h": "c"
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

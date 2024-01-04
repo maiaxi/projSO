@@ -47,12 +47,12 @@ void *thread_function(void *arg){
    * at the same time, but only one thread can write to it at a time.*/
   //pthread_rwlock_t *rwl = ((thread_args_t *)arg)->rwl;
   unsigned int event_id, delay;
-  size_t num_rows, num_columns, num_coords;
+  size_t num_rows, num_columns,;
   size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
   //write by parts the switch case
-  pthread_mutex_lock(trinco);
   switch(get_next(input_fd)){
     case CMD_CREATE:
+      pthread_mutex_lock(trinco);
       if (parse_create(input_fd, &event_id, &num_rows, &num_columns) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         //why is this continue here?
@@ -61,34 +61,42 @@ void *thread_function(void *arg){
       if (ems_create(event_id, num_rows, num_columns)) {
         fprintf(stderr, "Failed to create event\n");
       }
+      pthread_mutex_unlock(trinco);
       break;
     case CMD_RESERVE:
+      pthread_mutex_lock(trinco);
       num_coords = parse_reserve(input_fd, MAX_RESERVATION_SIZE, &event_id, xs, ys);
       if (num_coords == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         exit(EXIT_FAILURE);
       }
-
       if (ems_reserve(event_id, num_coords, xs, ys)) {
         fprintf(stderr, "Failed to reserve seats\n");
       }
+      pthread_mutex_unlock(trinco);
       break;
     case CMD_SHOW:
+      pthread_mutex_lock(trinco);
       if (parse_show(input_fd, &event_id) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         exit(EXIT_FAILURE);
       }
-
       if (ems_show(event_id, output_fd)) {
         fprintf(stderr, "Failed to show event\n");
       }
+      pthread_mutex_unlock(trinco);
       break;
     case CMD_LIST_EVENTS:
+
+      pthread_mutex_lock(trinco);
       if (ems_list_events(output_fd)) {
         fprintf(stderr, "Failed to list events\n");
       }
+
+      pthread_mutex_lock(trinco);
       break;
     case CMD_WAIT:
+      pthread_mutex_lock(trinco);
       if (parse_wait(input_fd, &delay, NULL) == -1) {  // thread_id is not implemented
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         exit(EXIT_FAILURE);
@@ -97,6 +105,7 @@ void *thread_function(void *arg){
         printf("Waiting...\n");
         ems_wait(delay);
       }
+      pthread_mutex_unlock(trinco);
       break;
     case CMD_INVALID:
       fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -123,7 +132,6 @@ void *thread_function(void *arg){
       exit(EXIT_SUCCESS);
       break;
   }
-  pthread_mutex_unlock(trinco);
   return NULL;
 }
 
