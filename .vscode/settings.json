@@ -16,7 +16,8 @@
         "istream": "c",
         "constants.h": "c",
         "pthread.h": "c",
-        "eventlist.h": "c"
+        "eventlist.h": "c",
+        "assert.h": "c"
     },
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "enabled"
 }

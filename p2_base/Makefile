@@ -24,7 +24,7 @@ client/client: common/io.o client/main.c client/api.o client/parser.o
 	$(CC) $(CFLAGS) -c ${@:.o=.c} -o $@
 
 run: server/ems
-	@./server/ems
+	@./server/ems server.fifo
 
 clean:
 	rm -f common/*.o client/*.o server/*.o server/ems client/client
