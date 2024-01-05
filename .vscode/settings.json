@@ -17,7 +17,8 @@
         "constants.h": "c",
         "pthread.h": "c",
         "eventlist.h": "c",
-        "assert.h": "c"
+        "assert.h": "c",
+        "stddef.h": "c"
     },
     "C_Cpp.errorSquiggles": "enabled"
 }
