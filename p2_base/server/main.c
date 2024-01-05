@@ -29,60 +29,81 @@ int num_threads = 0;
 int num_clients = 0;
 int server_fd = 0;
 
+#define BUFFER_SIZE 10
+
+client_info buffer[BUFFER_SIZE];
+int buffer_in = 0;
+int buffer_out = 0;
+int buffer_count = 0;
+
+pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t buffer_not_empty = PTHREAD_COND_INITIALIZER;
+pthread_cond_t buffer_not_full = PTHREAD_COND_INITIALIZER;
 
 void* worker_thread(void* arg) {
-  client_info* info = (client_info*)arg;
   int temp_session;
   char op_code[2];
 
   // opens the client request pipe
   // print the length of the request pipe path
-  int req_fd = open(info->req_pipe_path, O_RDONLY);
+  pthread_mutex_lock(&buffer_mutex);
+  while (buffer_count == 0) {
+    pthread_cond_wait(&buffer_not_empty, &buffer_mutex);
+  }
+  client_info info = buffer[buffer_out];
+  buffer_out = (buffer_out + 1) % BUFFER_SIZE;
+  buffer_count--;
+  pthread_cond_signal(&buffer_not_full);
+  pthread_mutex_unlock(&buffer_mutex);
+
+  int req_fd = open(info.req_pipe_path, O_RDONLY);
   if (req_fd == -1) {
-    fprintf(stderr, "[ERR]: open(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+    fprintf(stderr, "[ERR]: open(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
     exit(EXIT_FAILURE);
   }
 
-  int resp_fd = open(info->resp_pipe_path, O_WRONLY);
+  int resp_fd = open(info.resp_pipe_path, O_WRONLY);
   if (resp_fd == -1) {
-    fprintf(stderr, "[ERR]: open(%s) failed: %s\n", info->resp_pipe_path, strerror(errno));
+    fprintf(stderr, "[ERR]: open(%s) failed: %s\n", info.resp_pipe_path, strerror(errno));
     exit(EXIT_FAILURE);
   }
-  printf("Client %d connected!\n", info->sess_id);
+  printf("Client %d connected!\n", info.sess_id);
   while (1) {
     // gets the first char of the message to determine the operation
-    printf("Waiting for client %d to send a message...\n", info->sess_id);
+    printf("Waiting for client %d to send a message...\n", info.sess_id);
     read(req_fd, op_code, sizeof(char) * 2);
     printf("Operation code: %c\n", op_code[0]);
     switch (op_code[0]) {
       case '2':
-        printf("Client %d disconnected!\n", info->sess_id);
+        printf("Client %d disconnected!\n", info.sess_id);
+        close(req_fd);
+        close(resp_fd);
         pthread_exit(EXIT_SUCCESS);
       case '3':
         // the server asks for the session id
         if (read(req_fd, &temp_session, sizeof(int)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
         // the server asks the event id
         unsigned int event_id;
         if (read(req_fd, &event_id, sizeof(unsigned int)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
         // asks for the event rows
         size_t event_row;
         if (read(req_fd, &event_row, sizeof(size_t)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
         // asks for the event collumns
         size_t event_collumns;
         if (read(req_fd, &event_collumns, sizeof(size_t)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
@@ -95,34 +116,34 @@ void* worker_thread(void* arg) {
       case '4':
         // the server asks for the session id
         if (read(req_fd, &temp_session, sizeof(int)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
         // the server asks the event id
         unsigned int event_id_reserve;
         if (read(req_fd, &event_id_reserve, sizeof(unsigned int)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
         // asks for the number of seats
         size_t num_seats;
         if (read(req_fd, &num_seats, sizeof(size_t)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
         // asks for the x coordinates
         size_t* xs = malloc(sizeof(size_t) * num_seats);
         if (read(req_fd, xs, sizeof(size_t) * num_seats) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
         // asks for the y coordinates
         size_t* ys = malloc(sizeof(size_t) * num_seats);
         if (read(req_fd, ys, sizeof(size_t) * num_seats) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
@@ -134,14 +155,14 @@ void* worker_thread(void* arg) {
       case '5':
         // the server asks for the session id
         if (read(req_fd, &temp_session, sizeof(int)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
         // the server asks the event id
         unsigned int event_id_show;
         if (read(req_fd, &event_id_show, sizeof(unsigned int)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
@@ -154,7 +175,7 @@ void* worker_thread(void* arg) {
       case '6':
         // the server asks for the session id
         if (read(req_fd, &temp_session, sizeof(int)) == -1) {
-          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info->req_pipe_path, strerror(errno));
+          fprintf(stderr, "[ERR]: read(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
           exit(EXIT_FAILURE);
         }
 
@@ -202,8 +223,12 @@ int main(int argc, char* argv[]) {
 
   // initializes the worker threads
   pthread_t worker_threads[NUM_WORKER_THREADS];
+  for (int i = 0; i < NUM_WORKER_THREADS; i++) {
+    pthread_create(&worker_threads[i], NULL, worker_thread, NULL);
+  }
 
   while (1) {
+    client_info info;
     // waits for a client to connect
     int fd = open(argv[1], O_RDONLY);
     printf("Waiting for client to connect...\n");
@@ -238,6 +263,14 @@ int main(int argc, char* argv[]) {
       exit(EXIT_FAILURE);
     }
 
+    info.sess_id = num_clients;
+    for (int i = 0; i < 40; i++) {
+      strcpy(info.req_pipe_path, buffer_req);
+      strcpy(info.resp_pipe_path, buffer_resp);
+    }
+
+    num_clients++;
+
     close(fd);
 
     fd = open(argv[1], O_WRONLY);
@@ -248,25 +281,15 @@ int main(int argc, char* argv[]) {
       exit(EXIT_FAILURE);
     }
 
-    // for now on, we create a new thread for each client
-    // if the clients are full, we wait for one to finish
-    if (num_threads == NUM_WORKER_THREADS) {
-      pthread_join(worker_threads[0], NULL);
-      for (int i = 0; i < NUM_WORKER_THREADS - 1; i++) {
-        worker_threads[i] = worker_threads[i + 1];
-      }
-      num_threads--;
+    pthread_mutex_lock(&buffer_mutex);
+    while (buffer_count == BUFFER_SIZE) {
+      pthread_cond_wait(&buffer_not_full, &buffer_mutex);
     }
-    num_threads++;
-    num_clients++;
-    // creates a new thread for the client and passes the client info to the thread
-    client_info* info = malloc(sizeof(client_info));
-    info->sess_id = num_clients - 1;
-    for (int i = 0; i < 40; i++) {
-      strcpy(info->req_pipe_path, buffer_req);
-      strcpy(info->resp_pipe_path, buffer_resp);
-    }
-    pthread_create(&worker_threads[num_threads - 1], NULL, worker_thread, info);
+    buffer[buffer_in] = info;
+    buffer_in = (buffer_in + 1) % BUFFER_SIZE;
+    buffer_count++;
+    pthread_cond_signal(&buffer_not_empty);
+    pthread_mutex_unlock(&buffer_mutex);
     close(fd);
   }
   close(server_fd);
