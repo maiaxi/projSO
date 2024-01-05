@@ -257,3 +257,46 @@ int ems_list_events(int out_fd) {
 
   return 0;
 }
+
+int ems_print_event_info() {
+  // this function printf all the events and their seats
+  if (event_list == NULL) {
+    fprintf(stderr, "EMS state must be initialized\n");
+    return 1;
+  }
+
+  if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
+    fprintf(stderr, "Error locking list rwl\n");
+    return 1;
+  }
+
+  struct ListNode* to = event_list->tail;
+  struct ListNode* current = event_list->head;
+
+  if (current == NULL) {
+    printf("No events\n");
+    pthread_rwlock_unlock(&event_list->rwl);
+    return 0;
+  }
+
+  while (1) {
+    printf("Event %d\n", (current->event)->id);
+    printf("Rows: %ld\n", (current->event)->rows);
+    printf("Columns: %ld\n", (current->event)->cols);
+    printf("Reservations: %d\n", (current->event)->reservations);
+    printf("Seats:\n");
+    for (size_t i = 0; i < (current->event)->rows; i++) {
+      for (size_t j = 0; j < (current->event)->cols; j++) {
+        printf("%d ", (current->event)->data[i * (current->event)->cols + j]);
+      }
+      printf("\n");
+    }
+    printf("\n");
+    if (current == to) {
+      break;
+    }
+    current = current->next;
+  }
+  pthread_rwlock_unlock(&event_list->rwl);
+  return 0;
+}

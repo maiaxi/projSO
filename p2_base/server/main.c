@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +19,7 @@
 #include "server/eventlist.h"
 
 #define NUM_WORKER_THREADS 4
+#define BUFFER_SIZE 10
 
 typedef struct {
   int sess_id;
@@ -29,8 +31,6 @@ int num_threads = 0;
 int num_clients = 0;
 int server_fd = 0;
 
-#define BUFFER_SIZE 10
-
 client_info buffer[BUFFER_SIZE];
 int buffer_in = 0;
 int buffer_out = 0;
@@ -40,10 +40,33 @@ pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t buffer_not_empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t buffer_not_full = PTHREAD_COND_INITIALIZER;
 
+volatile sig_atomic_t print_event_info = 0;
+
+// signal handler for SIGUSR1
+void sigusr1_handler(int signum) {
+  if (signum != SIGUSR1) {
+    fprintf(stderr, "[ERR]: sigusr1_handler received wrong signal\n");
+    exit(EXIT_FAILURE);
+  }
+  print_event_info = 1;
+  // Set up SIGUSR1 handler
+  struct sigaction sa;
+  sa.sa_handler = sigusr1_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;  // Automatically restart certain interrupted system calls
+  if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+    perror("Failed to set up SIGUSR1 handler");
+  }
+}
+
 void* worker_thread(void* arg) {
+  sigset_t set;
+  sigemptyset(&set);
+  sigaddset(&set, SIGINT);
+  pthread_sigmask(SIG_BLOCK, &set, NULL);
+
   int temp_session;
   char op_code[2];
-
   // opens the client request pipe
   // print the length of the request pipe path
   pthread_mutex_lock(&buffer_mutex);
@@ -57,6 +80,7 @@ void* worker_thread(void* arg) {
   pthread_mutex_unlock(&buffer_mutex);
 
   int req_fd = open(info.req_pipe_path, O_RDONLY);
+
   if (req_fd == -1) {
     fprintf(stderr, "[ERR]: open(%s) failed: %s\n", info.req_pipe_path, strerror(errno));
     exit(EXIT_FAILURE);
@@ -68,6 +92,7 @@ void* worker_thread(void* arg) {
     exit(EXIT_FAILURE);
   }
   printf("Client %d connected!\n", info.sess_id);
+
   while (1) {
     // gets the first char of the message to determine the operation
     printf("Waiting for client %d to send a message...\n", info.sess_id);
@@ -189,11 +214,24 @@ void* worker_thread(void* arg) {
 }
 
 int main(int argc, char* argv[]) {
+  /* Set up SIGUSR1 handler
+   We use this type of handler because
+   we want to be able to interrupt the
+   server so that it prints the events i
+   info and does not interrupt the system calls*/
+  struct sigaction sa;
+  sa.sa_handler = sigusr1_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;  // Automatically restart certain interrupted system calls
+  if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+    perror("Failed to set up SIGUSR1 handler");
+    return 1;
+  }
+
   if (argc < 2 || argc > 3) {
     fprintf(stderr, "Usage: %s\n <pipe_path> [delay]\n", argv[0]);
     return 1;
   }
-
   char* endptr;
   unsigned int state_access_delay_us = STATE_ACCESS_DELAY_US;
   if (argc == 3) {
@@ -228,11 +266,15 @@ int main(int argc, char* argv[]) {
   }
 
   while (1) {
+    if (print_event_info) {
+      print_event_info = 0;
+      ems_print_event_info();
+    }
     client_info info;
     // waits for a client to connect
-    int fd = open(argv[1], O_RDONLY);
     printf("Waiting for client to connect...\n");
-    if (fd == -1) {
+    server_fd = open(argv[1], O_RDONLY);
+    if (server_fd == -1) {
       fprintf(stderr, "[ERR]: open(%s) failed: %s\n", argv[1], strerror(errno));
       exit(EXIT_FAILURE);
     }
@@ -240,7 +282,7 @@ int main(int argc, char* argv[]) {
     // reads the first char of the message to determine if the client wants to connect
     char start[2];
 
-    if (read(fd, start, sizeof(char) * 2) == -1) {
+    if (read(server_fd, start, sizeof(char) * 2) == -1) {
       fprintf(stderr, "[ERR]: read(%s) failed: %s\n", argv[1], strerror(errno));
       exit(EXIT_FAILURE);
     }
@@ -251,14 +293,14 @@ int main(int argc, char* argv[]) {
 
     // reads the first part of the message from the client
     char buffer_req[40];
-    if (read(fd, buffer_req, 40) == -1) {
+    if (read(server_fd, buffer_req, 40) == -1) {
       fprintf(stderr, "[ERR]: read(%s) failed: %s\n", argv[1], strerror(errno));
       exit(EXIT_FAILURE);
     }
 
     // reads the second part of the message from the client
     char buffer_resp[40];
-    if (read(fd, buffer_resp, 40) == -1) {
+    if (read(server_fd, buffer_resp, 40) == -1) {
       fprintf(stderr, "[ERR]: read(%s) failed: %s\n", argv[1], strerror(errno));
       exit(EXIT_FAILURE);
     }
@@ -271,16 +313,14 @@ int main(int argc, char* argv[]) {
 
     num_clients++;
 
-    close(fd);
-
-    fd = open(argv[1], O_WRONLY);
+    close(server_fd);
+    server_fd = open(argv[1], O_WRONLY);
     // sends the session id to the client
     int session_id = num_clients;
-    if (write(fd, &session_id, sizeof(int)) == -1) {
+    if (write(server_fd, &session_id, sizeof(int)) == -1) {
       fprintf(stderr, "[ERR]: write(%s) failed: %s\n", argv[1], strerror(errno));
       exit(EXIT_FAILURE);
     }
-
     pthread_mutex_lock(&buffer_mutex);
     while (buffer_count == BUFFER_SIZE) {
       pthread_cond_wait(&buffer_not_full, &buffer_mutex);
@@ -290,9 +330,10 @@ int main(int argc, char* argv[]) {
     buffer_count++;
     pthread_cond_signal(&buffer_not_empty);
     pthread_mutex_unlock(&buffer_mutex);
-    close(fd);
+    close(server_fd);
   }
   close(server_fd);
+  unlink(argv[1]);
 
   ems_terminate();
 }
