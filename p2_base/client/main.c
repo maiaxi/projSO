@@ -13,12 +13,12 @@ int main(int argc, char* argv[]) {
             argv[0]);
     return 1;
   }
-  
+
   if (ems_setup(argv[1], argv[2], argv[3])) {
     fprintf(stderr, "Failed to set up EMS\n");
     return 1;
   }
-  
+
   const char* dot = strrchr(argv[4], '.');
   if (dot == NULL || dot == argv[4] || strlen(dot) != 5 || strcmp(dot, ".jobs") ||
       strlen(argv[4]) > MAX_JOB_FILE_NAME_SIZE) {
@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
           continue;
         }
         if (ems_create(event_id, num_rows, num_columns)) fprintf(stderr, "Failed to create event\n");
-        
+
         break;
 
       case CMD_RESERVE:
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
           continue;
         }
         if (ems_reserve(event_id, num_coords, xs, ys)) fprintf(stderr, "Failed to reserve seats\n");
-        
+
         break;
 
       case CMD_SHOW:
@@ -82,13 +82,13 @@ int main(int argc, char* argv[]) {
 
       case CMD_WAIT:
         if (parse_wait(in_fd, &delay, NULL) == -1) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
+          continue;
         }
 
         if (delay > 0) {
-            printf("Waiting...\n");
-            sleep(delay);
+          printf("Waiting...\n");
+          sleep(delay);
         }
         break;
 

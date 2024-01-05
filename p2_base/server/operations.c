@@ -10,7 +10,6 @@
 #define TRUE 1
 #define FALSE 0
 
-
 static struct EventList* event_list = NULL;
 static unsigned int state_access_delay_us = 0;
 
@@ -142,7 +141,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     fprintf(stderr, "Error locking mutex\n");
     return 1;
   }
-  
+
   for (size_t i = 0; i < num_seats; i++) {
     if (xs[i] <= 0 || xs[i] > event->rows || ys[i] <= 0 || ys[i] > event->cols) {
       fprintf(stderr, "Seat out of bounds\n");
@@ -189,9 +188,8 @@ int ems_show(int out_fd, unsigned int event_id) {
     return 1;
   }
 
-  
   struct Event* event = get_event_with_delay(event_id, event_list->head, event_list->tail);
-  
+
   pthread_rwlock_unlock(&event_list->rwl);
 
   if (event == NULL) {
@@ -230,17 +228,11 @@ int ems_list_events(int out_fd) {
   struct ListNode* current = event_list->head;
 
   size_t num_events = 0;
-  int unsigned *ids;
+  int unsigned* ids;
   if (current == NULL) {
-
     write(out_fd, &num_events, sizeof(size_t));
     ids = malloc(sizeof(unsigned int) * num_events);
     write(out_fd, ids, sizeof(unsigned int) * num_events);
-    /*if (print_str(out_fd, buff)) {
-      perror("Error writing to file descriptor");
-      pthread_rwlock_unlock(&event_list->rwl);
-      return 1;
-    }*/
 
     pthread_rwlock_unlock(&event_list->rwl);
     return 0;
